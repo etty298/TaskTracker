@@ -36,9 +36,15 @@ public class TaskController {
      * Получить список задач в конкретном состоянии.
      */
     @GetMapping(GET_TASKS)
-    public List<TaskDto> getTasks(@PathVariable(name = "task_state_id") Long taskStateId) {
+    public List<TaskDto> getTasks(
+            @RequestHeader("X-Username") String ownerName,
+            @PathVariable(name = "task_state_id") Long taskStateId) {
 
         TaskStateEntity taskState = controllerHelper.getTaskStateOrThrowException(taskStateId);
+
+        if (!taskState.getProject().getOwnerName().equals(ownerName)) {
+            throw new BadRequestException(String.format("Task state \"%s\" not found.", taskStateId));
+        }
         return taskState
                 .getTasks()
                 .stream()
@@ -51,13 +57,21 @@ public class TaskController {
      */
     @PostMapping(CREATE_TASK)
     public TaskDto createTask(
+            @RequestHeader("X-Username") String ownerName,
             @PathVariable(name = "task_state_id") Long taskStateId,
             @RequestParam(name = "task_name") String taskName,
             @RequestParam(name = "task_description", required = false) Optional<String>optionalTaskDescription) {
+
+        TaskStateEntity taskState = controllerHelper.getTaskStateOrThrowException(taskStateId);
+
+        if (!taskState.getProject().getOwnerName().equals(ownerName)) {
+            throw new BadRequestException(String.format("Task state \"%s\" not found.", taskStateId));
+        }
+
         if (taskName.trim().isEmpty()) {
             throw new BadRequestException("Task name cannot be empty.");
         }
-        TaskStateEntity taskState = controllerHelper.getTaskStateOrThrowException(taskStateId);
+
         Optional<TaskEntity> optionalLowerTask = Optional.empty();
         for (TaskEntity task : taskState.getTasks()) {
             if (task.getLowerTask().isEmpty()) {
@@ -88,13 +102,21 @@ public class TaskController {
      */
     @PatchMapping(UPDATE_TASK_STATES)
     public TaskDto updateTask(
+            @RequestHeader("X-Username") String ownerName,
             @PathVariable(name = "task_id") Long taskId,
             @RequestParam(name = "task_name", required = false) Optional<String> optionalTaskName,
             @RequestParam(name = "task_description", required = false) Optional<String> optionalTaskDescription) {
+
+        TaskEntity task = controllerHelper.getTaskOrThrowException(taskId);
+
+        if (!task.getTaskState().getProject().getOwnerName().equals(ownerName)) {
+            throw new BadRequestException(String.format("Task \"%s\" not found.", taskId));
+        }
+
         if (optionalTaskName.isEmpty() && optionalTaskDescription.isEmpty()) {
             throw new BadRequestException("Task name should not be empty or task description should not be empty.");
         }
-        TaskEntity task = controllerHelper.getTaskOrThrowException(taskId);
+
         optionalTaskName.ifPresent(task::setName);
         optionalTaskDescription.ifPresent(task::setDescription);
         task = taskRepository.saveAndFlush(task);
@@ -106,10 +128,18 @@ public class TaskController {
      */
     @PatchMapping(CHANGE_TASK_POSITIONS)
     public TaskDto changeTaskPositions(
+            @RequestHeader("X-Username") String ownerName,
             @PathVariable(name = "task_id") Long taskId,
             @RequestParam(name = "upper_task_id", required = false) Optional<Long> optionalUpperTaskId) {
+
         TaskEntity changeTask = controllerHelper.getTaskOrThrowException(taskId);
+
         TaskStateEntity taskState = changeTask.getTaskState();
+
+        if (!taskState.getProject().getOwnerName().equals(ownerName)) {
+            throw new BadRequestException(String.format("Task \"%s\" not found.", changeTask.getName()));
+        }
+
         Optional<Long> optionalOldUpperTaskId = changeTask
                 .getUpperTask()
                 .map(TaskEntity::getId);
@@ -127,7 +157,7 @@ public class TaskController {
                     }
                     return upperTaskEntity;
                 });
-        Optional<TaskEntity> optionalNewLowerTask = Optional.empty();
+        Optional<TaskEntity> optionalNewLowerTask;
         if (optionalNewUpperTask.isEmpty()) {
             optionalNewLowerTask = taskState
                     .getTasks()
@@ -162,11 +192,20 @@ public class TaskController {
      * Удалить задачу из состояния.
      */
     @DeleteMapping(DELETE_TASK)
-    public AnswerDto deleteTask(@PathVariable(name = "task_id") Long TaskId) {
+    public AnswerDto deleteTask(
+            @RequestHeader("X-Username") String ownerName,
+            @PathVariable(name = "task_id") Long TaskId) {
 
         TaskEntity task = controllerHelper.getTaskOrThrowException(TaskId);
+
+        if (!task.getTaskState().getProject().getOwnerName().equals(ownerName)) {
+            throw new BadRequestException(String.format("Task \"%s\" not found.", task.getName()));
+        }
+
         replaceOldTasksPositions(task);
+
         taskRepository.deleteById(task.getId());
+
         return AnswerDto.setAnswer(true);
     }
     private void replaceOldTasksPositions(TaskEntity task) {

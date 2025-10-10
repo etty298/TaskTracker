@@ -11,6 +11,7 @@ public class ProjectDtoFactory {
         return ProjectDto.builder()
                 .id(entity.getId())
                 .name(entity.getName())
+                .ownerName(entity.getOwnerName())
                 .createdAt(entity.getCreatedAt())
                 .build();
     }

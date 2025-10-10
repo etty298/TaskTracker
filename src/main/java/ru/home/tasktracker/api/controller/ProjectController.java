@@ -47,15 +47,16 @@ public class ProjectController {
      */
     @GetMapping(FETCH_PROJECT)
     public List<ProjectDto> fetchProjects(
+            @RequestHeader("X-Username") String ownerName,
             @RequestParam(name = "prefix_name", required = false) Optional<String> optionalPrefixName) {
 
         // Если есть параметр prefix_name и он не пустой — фильтруем по имени
         Stream<ProjectEntity> projectStream = optionalPrefixName
             .filter(prefixName -> !prefixName.trim().isEmpty())
             // достаём проекты, у которых имя начинается с переданного префикса
-            .map(projectRepository::streamAllByNameStartsWithIgnoreCase)
+            .map(prefixName -> projectRepository.streamAllByNameStartsWithIgnoreCaseAndOwnerName(prefixName, ownerName))
             // иначе берём все проекты
-            .orElseGet(projectRepository::streamAllBy);
+            .orElseGet(() -> projectRepository.streamAllByOwnerName(ownerName));
 
         // Преобразуем ProjectEntity → ProjectDto и собираем в список
         return projectStream
@@ -68,14 +69,16 @@ public class ProjectController {
      * Проверяет, что имя не пустое и что проект с таким именем ещё не существует.
      */
     @PostMapping(CREATE_PROJECT)
-    public ProjectDto createProject(@RequestParam(name = "project_name") String projectName) {
+    public ProjectDto createProject(
+            @RequestHeader("X-Username") String ownerName,
+            @RequestParam(name = "project_name") String projectName) {
 
         // Проверяем имя проекта; выбросим exception если имя пустое
         checkIfProjectNameIsEmptyAndThrowException(projectName);
 
         // Проверка: есть ли уже проект с таким именем; выбросим exception если есть
         projectRepository
-                .findByName(projectName)
+                .findByNameAndOwnerName(projectName, ownerName)
                 .ifPresent(project -> {
                     // Если найден — выбрасываем исключение 400 (Bad Request)
                     throw new BadRequestException(String.format("Project \"%s\" already exists.", projectName));
@@ -86,6 +89,7 @@ public class ProjectController {
                 ProjectEntity
                         .builder()
                         .name(projectName)
+                        .ownerName(ownerName)
                         .build()
         );
         // Преобразуем ProjectEntity → ProjectDto
@@ -98,6 +102,7 @@ public class ProjectController {
      */
     @PatchMapping(EDIT_PROJECT)
     public ProjectDto editProject(
+            @RequestHeader("X-Username") String ownerName,
             @RequestParam(name = "project_name") String projectName,
             @PathVariable(value = "project_id") Long projectId) {
 
@@ -105,11 +110,11 @@ public class ProjectController {
         checkIfProjectNameIsEmptyAndThrowException(projectName);
 
         // Находим проект по projectId; выбрасываем exception, если его нет
-        ProjectEntity project = controllerHelper.getProjectOrThrowException(projectId);
+        ProjectEntity project = controllerHelper.getProjectByOwnerNameOrThrowException(projectId, ownerName);
 
         // Проверка: есть ли уже проект с таким именем; выбросим exception если есть
         projectRepository
-                .findByName(projectName)
+                .findByNameAndOwnerName(projectName, ownerName)
                 // Проверка: совпадают ли id; выбросим exception если есть
                 .filter(anotherProject -> !anotherProject.getId().equals(projectId))
                 .ifPresent(anotherProject -> {
@@ -127,10 +132,12 @@ public class ProjectController {
      * Удалить проект по его projectId.
      */
     @DeleteMapping(DELETE_PROJECT)
-    public AnswerDto deleteProject(@PathVariable(value = "project_id") Long projectId) {
+    public AnswerDto deleteProject(
+            @RequestHeader("X-Username") String ownerName,
+            @PathVariable(value = "project_id") Long projectId) {
 
         // Проверяем, что проект существует; выбросим exception если проект не существует
-        controllerHelper.getProjectOrThrowException(projectId);
+        controllerHelper.getProjectByOwnerNameOrThrowException(projectId, ownerName);
 
         // Удаляем проект из базы
         projectRepository.deleteById(projectId);

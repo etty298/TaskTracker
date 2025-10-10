@@ -1,9 +1,7 @@
 package ru.home.tasktracker.api.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import jakarta.persistence.OneToOne;
 import lombok.*;
-import ru.home.tasktracker.store.entities.TaskStateEntity;
 
 import java.time.Instant;
 import java.util.List;

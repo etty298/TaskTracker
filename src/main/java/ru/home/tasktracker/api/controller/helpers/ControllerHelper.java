@@ -23,9 +23,9 @@ public class ControllerHelper {
     private final TaskRepository taskRepository;
 
 
-    public ProjectEntity getProjectOrThrowException(Long projectId) {
+    public ProjectEntity getProjectByOwnerNameOrThrowException(Long projectId, String ownerName) {
         return projectRepository
-                .findById(projectId)
+                .findByIdAndOwnerName(projectId, ownerName)
                 .orElseThrow(() ->
                         new NotFoundException(
                                 String.format(

@@ -13,15 +13,19 @@ import java.util.List;
 @AllArgsConstructor
 @Builder
 @Entity
-@Table(name = "project")
+@Table(
+        name = "project",
+        uniqueConstraints = @UniqueConstraint(columnNames = {"name", "owner_name"})
+)
 public class ProjectEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE)
     private Long id;
 
-    @Column(unique = true)
     private String name;
+
+    private String ownerName;
 
     @Builder.Default
     private Instant createdAt = Instant.now();

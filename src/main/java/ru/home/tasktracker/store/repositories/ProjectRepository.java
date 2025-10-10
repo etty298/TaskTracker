@@ -8,10 +8,12 @@ import java.util.stream.Stream;
 
     public interface ProjectRepository extends JpaRepository<ProjectEntity, Long> {
 
-    Optional<ProjectEntity> findByName(String name);
+    Optional<ProjectEntity> findByNameAndOwnerName(String name, String ownerName);
 
-    Stream<ProjectEntity> streamAllBy();
+    Stream<ProjectEntity> streamAllByOwnerName(String ownerName);
 
-    Stream<ProjectEntity> streamAllByNameStartsWithIgnoreCase(String prefixName);
+    Stream<ProjectEntity> streamAllByNameStartsWithIgnoreCaseAndOwnerName(String name, String ownerName);
+
+    Optional<ProjectEntity> findByIdAndOwnerName(Long id, String ownerName);
 
 }

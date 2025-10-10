@@ -41,10 +41,12 @@ public class TaskStateController {
      * Получение списка всех состояний задач проекта.
      */
     @GetMapping(GET_TASK_STATES)
-    public List<TaskStateDto> getTaskStates(@PathVariable(name = "project_id") Long projectId) {
+    public List<TaskStateDto> getTaskStates(
+            @RequestHeader("X-Username") String ownerName,
+            @PathVariable(name = "project_id") Long projectId) {
 
         // Берём проект — понадобится для нахождения task'ов.
-        ProjectEntity project = controllerHelper.getProjectOrThrowException(projectId);
+        ProjectEntity project = controllerHelper.getProjectByOwnerNameOrThrowException(projectId, ownerName);
 
         // Возвращаем список task'ов.
         return project
@@ -60,14 +62,15 @@ public class TaskStateController {
      */
     @PostMapping(CREATE_TASK_STATE)
     public TaskStateDto createTaskState(
+            @RequestHeader("X-Username") String ownerName,
             @PathVariable(name = "project_id") Long projectId,
             @RequestParam(name = "task_state_name") String taskStateName) {
 
-        // Проверяем имя task'и; выбросим exception если имя пустое
-        checkIfTaskStateNameIsEmptyOrThrowException(taskStateName);
-
         // Берём проект — понадобится для проверок принадлежности
-        ProjectEntity project = controllerHelper.getProjectOrThrowException(projectId);
+        ProjectEntity project = controllerHelper.getProjectByOwnerNameOrThrowException(projectId, ownerName);
+
+        // Проверяем имя taskState; выбросим exception если имя пустое
+        checkIfTaskStateNameIsEmptyOrThrowException(taskStateName);
 
         Optional<TaskStateEntity> optionalAnotherTaskState = Optional.empty();
 
@@ -75,7 +78,7 @@ public class TaskStateController {
         for (TaskStateEntity taskState : project.getTaskStates()) {
             // Проверка уникальности имени; выбросим exception в обратном случае
             if (taskState.getName().equalsIgnoreCase(taskStateName)) {
-                throw new BadRequestException(String.format("Task state \"s\" already exists.", taskStateName));
+                throw new BadRequestException(String.format("Task state \"%s\" already exists.", taskStateName));
             }
             // Ищем "крайний правый" элемент (у которого нет правого соседа)
             if (taskState.getRightTaskState().isEmpty()){
@@ -117,21 +120,26 @@ public class TaskStateController {
      */
     @PatchMapping(UPDATE_TASK_STATES)
     public TaskStateDto updateTaskState(
+            @RequestHeader("X-Username") String ownerName,
             @PathVariable(name = "task_state_id") Long taskStateId,
             @RequestParam(name = "task_state_name") String taskStateName) {
 
-        // Проверяем имя task'и; выбросим exception если имя пустое
-        checkIfTaskStateNameIsEmptyOrThrowException(taskStateName);
-
         // Получаем сущность по taskStateId
         TaskStateEntity taskState = controllerHelper.getTaskStateOrThrowException(taskStateId);
+
+        if (!taskState.getProject().getOwnerName().equals(ownerName)){
+            throw new BadRequestException(String.format("Task state \"%s\" not found.", taskStateId));
+        }
+
+        // Проверяем имя taskState; выбросим exception если имя пустое
+        checkIfTaskStateNameIsEmptyOrThrowException(taskStateName);
 
         // Проверка уникальности имени внутри того же проекта; выбросим exception в обратном случае
         taskStateRepository
                 .findTaskStateEntityByProjectIdAndNameContainsIgnoreCase(taskState.getProject().getId(), taskStateName)
                 .filter(anotherTaskState -> !anotherTaskState.getId().equals(taskStateId))
                 .ifPresent(anotherTaskState -> {
-                    throw new BadRequestException(String.format("Task state \"s\" already exists.", taskStateName));
+                    throw new BadRequestException(String.format("Task state \"%s\" already exists.", taskStateName));
                 });
 
         // Обновляем имя и сохраняем
@@ -148,6 +156,7 @@ public class TaskStateController {
      */
     @PatchMapping(CHANGE_TASK_STATES_POSITIONS)
     public TaskStateDto changeTaskStatesPositions(
+            @RequestHeader("X-Username") String ownerName,
             @PathVariable(name = "task_state_id") Long taskStateId,
             @RequestParam(name = "left_task_state_id", required = false) Optional<Long> optionalLeftTaskStateId) {
 
@@ -156,6 +165,10 @@ public class TaskStateController {
 
         // Берём проект — понадобится для проверок принадлежности.
         ProjectEntity project = taskState.getProject();
+
+        if (!project.getOwnerName().equals(ownerName)){
+            throw new BadRequestException(String.format("Task state \"%s\" not found.", taskStateId));
+        }
 
         // Получаем id текущего левого соседа (если он есть).
         Optional<Long> optionalOldTaskStateId = taskState
@@ -249,10 +262,16 @@ public class TaskStateController {
      * Перед удалением разрываются связи с соседями.
      */
     @DeleteMapping(DELETE_TASK_STATE)
-    public AnswerDto deleteTaskState(@PathVariable(name = "task_state_id") Long taskStateId) {
+    public AnswerDto deleteTaskState(
+            @RequestHeader("X-Username") String ownerName,
+            @PathVariable(name = "task_state_id") Long taskStateId) {
 
         // Получаем сущность по taskStateId, которую хотим удалить
         TaskStateEntity taskState = controllerHelper.getTaskStateOrThrowException(taskStateId);
+
+        if (!taskState.getProject().getOwnerName().equals(ownerName)){
+            throw new BadRequestException(String.format("Task state \"%s\" not found.", taskStateId));
+        }
 
         // Разрываем связи с соседями
         replaceOldTaskStatesPositions(taskState);
